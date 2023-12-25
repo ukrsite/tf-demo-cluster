@@ -1,25 +1,45 @@
-module "github_repository" {
-  source                   = "github.com/ukrsite/tf-github-repository"
-  github_owner             = var.GITHUB_OWNER
-  github_token             = var.GITHUB_TOKEN
-  repository_name          = var.FLUX_GITHUB_REPO
-  public_key_openssh       = module.tls_private_key.public_key_openssh
-  public_key_openssh_title = "flux"
+module "gke_cluster" {
+  source         = "github.com/den-vasyliev/tf-google-gke-cluster"
+  GOOGLE_REGION  = var.GOOGLE_REGION
+  GOOGLE_PROJECT = var.GOOGLE_PROJECT
+  GKE_NUM_NODES  = 1
 }
 
-module "kind_cluster" {
-  source = "github.com/ukrsite/tf-kind-cluster"
+provider "github" {
+  owner = var.github_org
+  token = var.github_token
 }
 
-module "flux_bootstrap" {
-  source            = "github.com/ukrsite/tf-fluxcd-flux-bootstrap"
-  github_repository = "${var.GITHUB_OWNER}/${var.FLUX_GITHUB_REPO}"
-  private_key       = module.tls_private_key.private_key_pem
-  config_path       = module.kind_cluster.kubeconfig
-  github_token      = var.GITHUB_TOKEN
+resource "tls_private_key" "flux" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
 }
 
-module "tls_private_key" {
-  source = "github.com/ukrsite/tf-hashicorp-tls-keys"
-  algorithm = "RSA"
+resource "github_repository_deploy_key" "this" {
+  title      = "Flux"
+  repository = var.github_repository
+  key        = tls_private_key.flux.public_key_openssh
+  read_only  = "false"
+}
+
+provider "flux" {
+  kubernetes = {
+    host                   = gke_cluster.this.endpoint
+    client_certificate     = gke_cluster.this.client_certificate
+    client_key             = gke_cluster.this.client_key
+    cluster_ca_certificate = gke_cluster.this.cluster_ca_certificate
+  }
+  git = {
+    url = "ssh://git@github.com/${var.github_org}/${var.github_repository}.git"
+    ssh = {
+      username    = "git"
+      private_key = tls_private_key.flux.private_key_pem
+    }
+  }
+}
+
+resource "flux_bootstrap_git" "this" {
+  depends_on = [github_repository_deploy_key.this]
+
+  path = "clusters/demo"
 }
