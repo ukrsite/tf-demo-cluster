@@ -1,45 +1,62 @@
+module "github_repository" {
+  source                   = "github.com/den-vasyliev/tf-github-repository"
+  github_owner             = var.GITHUB_OWNER
+  github_token             = var.GITHUB_TOKEN
+  repository_name          = var.FLUX_GITHUB_REPO
+  public_key_openssh       = module.tls_private_key.public_key_openssh
+  public_key_openssh_title = "flux0"
+}
+
 module "gke_cluster" {
-  source         = "github.com/den-vasyliev/tf-google-gke-cluster"
+  source         = "github.com/den-vasyliev/tf-google-gke-cluster?ref=gke_auth"
   GOOGLE_REGION  = var.GOOGLE_REGION
   GOOGLE_PROJECT = var.GOOGLE_PROJECT
-  GKE_NUM_NODES  = 1
+  GKE_NUM_NODES  = 2
 }
 
-provider "github" {
-  owner = var.github_org
-  token = var.github_token
-}
-
-resource "tls_private_key" "flux" {
-  algorithm   = "ECDSA"
-  ecdsa_curve = "P256"
-}
-
-resource "github_repository_deploy_key" "this" {
-  title      = "Flux"
-  repository = var.github_repository
-  key        = tls_private_key.flux.public_key_openssh
-  read_only  = "false"
+module "tls_private_key" {
+  source = "github.com/den-vasyliev/tf-hashicorp-tls-keys"
 }
 
 provider "flux" {
   kubernetes = {
-    host                   = gke_cluster.this.endpoint
-    client_certificate     = gke_cluster.this.client_certificate
-    client_key             = gke_cluster.this.client_key
-    cluster_ca_certificate = gke_cluster.this.cluster_ca_certificate
+    host                   = module.gke_cluster.config_host
+    token                  = module.gke_cluster.config_token
+    cluster_ca_certificate = module.gke_cluster.config_ca
   }
   git = {
-    url = "ssh://git@github.com/${var.github_org}/${var.github_repository}.git"
-    ssh = {
-      username    = "git"
-      private_key = tls_private_key.flux.private_key_pem
+    url = "https://github.com/${var.GITHUB_OWNER}/${var.FLUX_GITHUB_REPO}.git"
+    http = {
+      username = "git"
+      password = var.GITHUB_TOKEN
     }
   }
 }
 
 resource "flux_bootstrap_git" "this" {
-  depends_on = [github_repository_deploy_key.this]
+  path = "clusters"
+}
 
-  path = "clusters/demo"
+
+module "gke_workload_identity" {
+
+  source              = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
+  use_existing_k8s_sa = true
+  name                = "kustomize-controller"
+  namespace           = "flux-system"
+  project_id          = var.GOOGLE_PROJECT
+  cluster_name        = var.GKE_CLUSTER_NAME
+  location            = var.GOOGLE_REGION
+  annotate_k8s_sa     = true
+  roles               = ["roles/cloudkms.cryptoKeyEncrypterDecrypter"]
+}
+
+module "kms" {
+  source     = "github.com/den-vasyliev/terraform-google-kms"
+  project_id = var.GOOGLE_PROJECT  
+  keyring    = var.keyring_name
+  location   = "global"
+  keys       = ["sops-key-flux"]
+  # keys can be destroyed by Terraform
+  prevent_destroy = false
 }
