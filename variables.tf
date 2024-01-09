@@ -5,14 +5,8 @@ variable "GOOGLE_PROJECT" {
 
 variable "GOOGLE_REGION" {
   type        = string
-  default     = "us-central1"
+  default     = "us-central1-c"
   description = "GCP region to use"
-}
-
-variable "GKE_MACHINE_TYPE" {
-  type        = string
-  default     = "g1-micro"
-  description = "Machine type"
 }
 
 variable "GKE_NUM_NODES" {
@@ -33,12 +27,18 @@ variable "GKE_POOL_NAME" {
   description = "GKE pool name"
 }
 
-variable "GITHUB_OWNER" {
-  type        = string
+variable "GITHUB_TOKEN" {
+  sensitive = true
+  type      = string
 }
 
-variable "GITHUB_TOKEN" {
-  type        = string
+variable "github_token" {
+  sensitive = true
+  type      = string
+}
+
+variable "GITHUB_OWNER" {
+  type = string
 }
 
 variable "FLUX_GITHUB_REPO" {
@@ -50,4 +50,9 @@ variable "FLUX_GITHUB_REPO_TARGET_PATH" {
   type        = string
   default     = "clusters"
   description = "Flux manifests subdirectory"
+}
+
+variable "keyring_name" {
+  type    = string
+  default = "sops-flux7"  # Replace with the actual name of your existing KeyRing
 }
