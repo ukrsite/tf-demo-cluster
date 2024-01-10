@@ -48,11 +48,11 @@ variable "FLUX_GITHUB_REPO" {
 
 variable "FLUX_GITHUB_REPO_TARGET_PATH" {
   type        = string
-  default     = "clusters"
+  default     = "clusterscd "
   description = "Flux manifests subdirectory"
 }
 
 variable "keyring_name" {
   type    = string
-  default = "sops-flux7"  # Replace with the actual name of your existing KeyRing
+  default = "sops-flux11"  # Replace with the actual name of your existing KeyRing
 }
